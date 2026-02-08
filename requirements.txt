@@ -1,0 +1,29 @@
+# Framework web
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+
+# Modelos de datos
+pydantic>=2.5.0
+
+# Cliente HTTP
+aiohttp>=3.9.1
+requests>=2.31.0
+
+# Manejo de archivos
+aiofiles>=23.2.0
+
+# Base de datos
+sqlalchemy[asyncio]>=2.0.23
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+
+# Oracle Cloud Infrastructure SDK (nativo)
+oci>=2.125.4
+
+# Utilidades
+python-dotenv>=1.0.0
+
+# Para desarrollo y testing (opcional)
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+httpx>=0.25.2

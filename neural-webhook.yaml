@@ -1,0 +1,348 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: neural-webhook-sa
+  namespace: device-service
+  annotations:
+    oci.oraclecloud.com/compartment-id: "ocid1.compartment.oc1..aaaaaaaaula4i6y7yiuoeyoyve4g23ofvzezm6v634lhlhgg5m6ftd67hkoa"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neural-webhook-config
+  namespace: device-service
+data:
+  LOG_LEVEL: "WARNING"
+  DB_NAME: "trafficsoft"
+  DB_WRITE_PORT: "5432"
+  DB_READ_PORT: "5432"
+  DB_MIN_CONNECTIONS: "5"
+  DB_MAX_CONNECTIONS: "15"
+  CONNECTION_TIMEOUT: "3"
+  DB_QUERY_TIMEOUT: "10"
+
+  STORAGE_TYPE: "oracle_cloud"
+  ORACLE_NAMESPACE: "ax5xenainknp"
+  ORACLE_BUCKET_NAME: "webhook_cameras_prod"
+  ORACLE_REGION: "sa-bogota-1"
+  ORACLE_AUTH_TYPE: "instance_principal"
+
+  HEALTH_CHECK_INTERVAL: "30"
+  HEALTH_CHECK_TIMEOUT: "5"
+
+  # Neural-specific
+  MIN_CONFIDENCE_NEURAL: "85.0"
+  REJECT_FOREIGN_PLATES: "true"
+  MAX_OCR_CORRECTIONS_NEURAL: "1"
+  STRICT_MODE: "false"
+
+  # OCI Vault
+  VAULT_ID: "ocid1.vault.oc1.sa-bogota-1.i5uqw3hhaaar6.abrgcljrqw6bepy5gah2ipud2h5zlsvxfcmpgur4ttgvgpjhvkbzlkkokm6a"
+  VAULT_CACHE_TTL_SEC: "86400"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: neural-webhook-secrets
+  namespace: device-service
+type: Opaque
+stringData:
+  DB_USER: "admin"
+  SECRET_DB_PASSWORD: "postgres-prod"
+  DB_WRITE_HOST: "primary.jkgdtlvw6wp3knx5i3ifdxckbjjmpq.postgresql.sa-bogota-1.oci.oraclecloud.com"
+  DB_READ_HOST: "reader.jkgdtlvw6wp3knx5i3ifdxckbjjmpq.postgresql.sa-bogota-1.oci.oraclecloud.com"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neural-webhook
+  namespace: device-service
+  labels:
+    app: neural-webhook
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: neural-webhook
+  template:
+    metadata:
+      labels:
+        app: neural-webhook
+      annotations:
+        rollme: "v1.0.0"
+    spec:
+      serviceAccountName: neural-webhook-sa
+      nodeSelector:
+        name: trafficsoft-backend
+      containers:
+        - name: neural-webhook
+          image: bog.ocir.io/ax5xenainknp/neural_webhook:v1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: LOG_LEVEL
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_NAME
+            - name: DB_WRITE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: neural-webhook-secrets
+                  key: DB_WRITE_HOST
+            - name: DB_WRITE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_WRITE_PORT
+            - name: DB_READ_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: neural-webhook-secrets
+                  key: DB_READ_HOST
+            - name: DB_READ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_READ_PORT
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: neural-webhook-secrets
+                  key: DB_USER
+            - name: VAULT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: VAULT_ID
+            - name: SECRET_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: neural-webhook-secrets
+                  key: SECRET_DB_PASSWORD
+            - name: VAULT_CACHE_TTL_SEC
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: VAULT_CACHE_TTL_SEC
+            - name: DB_MIN_CONNECTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_MIN_CONNECTIONS
+            - name: DB_MAX_CONNECTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_MAX_CONNECTIONS
+            - name: CONNECTION_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: CONNECTION_TIMEOUT
+            - name: DB_QUERY_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: DB_QUERY_TIMEOUT
+            - name: STORAGE_TYPE
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: STORAGE_TYPE
+            - name: ORACLE_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: ORACLE_NAMESPACE
+            - name: ORACLE_BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: ORACLE_BUCKET_NAME
+            - name: ORACLE_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: ORACLE_REGION
+            - name: ORACLE_AUTH_TYPE
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: ORACLE_AUTH_TYPE
+            - name: EVIDENCE_FOLDER
+              value: "evidencias_neural"
+            - name: HEALTH_CHECK_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: HEALTH_CHECK_INTERVAL
+            - name: HEALTH_CHECK_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: HEALTH_CHECK_TIMEOUT
+            - name: MIN_CONFIDENCE_NEURAL
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: MIN_CONFIDENCE_NEURAL
+            - name: REJECT_FOREIGN_PLATES
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: REJECT_FOREIGN_PLATES
+            - name: MAX_OCR_CORRECTIONS_NEURAL
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: MAX_OCR_CORRECTIONS_NEURAL
+            - name: STRICT_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: STRICT_MODE
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: OCI_RESOURCE_PRINCIPAL_VERSION
+              value: "2.2"
+            - name: OCI_RESOURCE_PRINCIPAL_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: neural-webhook-config
+                  key: ORACLE_REGION
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 15
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+          volumeMounts:
+            - name: logs-storage
+              mountPath: /app/logs
+      volumes:
+        - name: logs-storage
+          emptyDir:
+            sizeLimit: 500Mi
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neural-webhook-service
+  namespace: device-service
+  labels:
+    app: neural-webhook
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: neural-webhook
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: neural-webhook-ingress
+  namespace: device-service
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx-cameras
+  rules:
+    - http:
+        paths:
+          - path: /neural(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: neural-webhook-service
+                port:
+                  number: 8000
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: neural-webhook-hpa
+  namespace: device-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: neural-webhook
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
